@@ -1,0 +1,709 @@
+local library = loadstring(game:HttpGet("https://raw.githubusercontent.com/0o0o0o0o0o0o0o0o0o0o0o0o/0o/refs/heads/main/CRUSHER.lua", true))()
+
+local window = library:AddWindow("TOXIC HUB | Farming", {
+    main_color = Color3.fromRGB(138, 0, 0),
+    min_size = Vector2.new(600, 600),
+    can_resize = false
+})
+
+----------------------------------------------------------------
+-- SERVIÇOS E VARIÁVEIS
+----------------------------------------------------------------
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+local VirtualInputManager = game:GetService("VirtualInputManager")
+local TeleportService = game:GetService("TeleportService")
+
+local player = Players.LocalPlayer
+local muscleEvent = player:WaitForChild("muscleEvent")
+local leaderstats = player:WaitForChild("leaderstats")
+local rebirthsStat = leaderstats:WaitForChild("Rebirths")
+local strengthStat = leaderstats:WaitForChild("Strength")
+local durabilityStat = player:WaitForChild("Durability")
+
+-- Esconde frames
+local blockedFrames = {"strengthFrame", "durabilityFrame", "agilityFrame"}
+for _, name in ipairs(blockedFrames) do
+    local frame = ReplicatedStorage:FindFirstChild(name)
+    if frame and frame:IsA("GuiObject") then
+        frame.Visible = false
+    end
+end
+ReplicatedStorage.ChildAdded:Connect(function(child)
+    if table.find(blockedFrames, child.Name) and child:IsA("GuiObject") then
+        child.Visible = false
+    end
+end)
+
+----------------------------------------------------------------
+-- FUNÇÕES AUXILIARES
+----------------------------------------------------------------
+local function formatNumber(num)
+    if num >= 1e15 then return string.format("%.2fQ", num/1e15) end
+    if num >= 1e12 then return string.format("%.2fT", num/1e12) end
+    if num >= 1e9 then return string.format("%.2fB", num/1e9) end
+    if num >= 1e6 then return string.format("%.2fM", num/1e6) end
+    if num >= 1e3 then return string.format("%.2fK", num/1e3) end
+    return string.format("%.0f", num)
+end
+
+local function unequipPets()
+    pcall(function()
+        for _, folder in pairs(player.petsFolder:GetChildren()) do
+            if folder:IsA("Folder") then
+                for _, pet in pairs(folder:GetChildren()) do
+                    ReplicatedStorage.rEvents.equipPetEvent:FireServer("unequipPet", pet)
+                end
+            end
+        end
+    end)
+    task.wait(0.1)
+end
+
+local function equipPetsByName(name)
+    unequipPets()
+    task.wait(0.05)
+    pcall(function()
+        for _, pet in pairs(player.petsFolder.Unique:GetChildren()) do
+            if pet.Name == name then
+                ReplicatedStorage.rEvents.equipPetEvent:FireServer("equipPet", pet)
+            end
+        end
+    end)
+end
+
+local function removePortals()
+    for _, portal in pairs(game:GetDescendants()) do
+        if portal.Name == "RobloxForwardPortals" then
+            portal:Destroy()
+        end
+    end
+    if _G.AdRemovalConnection then
+        _G.AdRemovalConnection:Disconnect()
+    end
+    _G.AdRemovalConnection = game.DescendantAdded:Connect(function(descendant)
+        if descendant.Name == "RobloxForwardPortals" then
+            descendant:Destroy()
+        end
+    end)
+end
+removePortals()
+
+----------------------------------------------------------------
+-- ABA MAIN
+----------------------------------------------------------------
+local MainTab = window:AddTab("          Main          ")
+
+MainTab:AddLabel("Settings").TextSize = 30
+
+MainTab:AddTextBox("Speed", function(value)
+    local speed = tonumber(value)
+    if speed and player.Character and player.Character:FindFirstChild("Humanoid") then
+        player.Character.Humanoid.WalkSpeed = speed
+    end
+end)
+
+MainTab:AddTextBox("Size", function(value)
+    local size = tonumber(value)
+    if size then
+        ReplicatedStorage.rEvents.changeSpeedSizeRemote:InvokeServer("changeSize", size)
+    end
+end)
+
+MainTab:AddLabel("Essentials:").TextSize = 30
+
+MainTab:AddButton("Load Infinite Yield", function()
+    loadstring(game:HttpGet('https://raw.githubusercontent.com/EdgeIY/infiniteyield/master/source'))()
+end)
+
+MainTab:AddButton("Load Anti Lag", function()
+    loadstring(game:HttpGet("https://raw.githubusercontent.com/juywvm/-Roblox-Projects-/main/____Anti_Afk_Remastered_______"))()
+end)
+
+-- Walk on Water
+local parts = {}
+local partSize = 2048
+local totalDistance = 50000
+local startPosition = Vector3.new(-2, -9.5, -2)
+
+task.spawn(function()
+    local numberOfParts = math.ceil(totalDistance / partSize)
+    for x = 0, numberOfParts - 1 do
+        for z = 0, numberOfParts - 1 do
+            local function createPart(pos, name)
+                local part = Instance.new("Part")
+                part.Size = Vector3.new(partSize, 1, partSize)
+                part.Position = pos
+                part.Anchored = true
+                part.Transparency = 1
+                part.CanCollide = false
+                part.Name = name
+                part.Parent = workspace
+                return part
+            end
+            table.insert(parts, createPart(startPosition + Vector3.new(x*partSize,0,z*partSize), "Part_Side_"..x.."_"..z))
+            table.insert(parts, createPart(startPosition + Vector3.new(-x*partSize,0,z*partSize), "Part_LeftRight_"..x.."_"..z))
+            table.insert(parts, createPart(startPosition + Vector3.new(-x*partSize,0,-z*partSize), "Part_UpLeft_"..x.."_"..z))
+            table.insert(parts, createPart(startPosition + Vector3.new(x*partSize,0,-z*partSize), "Part_UpRight_"..x.."_"..z))
+        end
+    end
+end)
+
+local walkonwaterSwitch = MainTab:AddSwitch("Walk on Water", function(bool)
+    for _, part in ipairs(parts) do
+        if part and part.Parent then
+            part.CanCollide = bool
+        end
+    end
+end)
+walkonwaterSwitch:Set(false)
+
+-- Anti Fling
+local antiKnockbackSwitch = MainTab:AddSwitch("Anti Fling", function(bool)
+    local character = workspace:FindFirstChild(player.Name)
+    if not character then return end
+    local rootPart = character:FindFirstChild("HumanoidRootPart")
+    if not rootPart then return end
+
+    if bool then
+        local bodyVelocity = Instance.new("BodyVelocity")
+        bodyVelocity.MaxForce = Vector3.new(100000, 0, 100000)
+        bodyVelocity.Velocity = Vector3.new(0, 0, 0)
+        bodyVelocity.P = 1250
+        bodyVelocity.Parent = rootPart
+    else
+        local existing = rootPart:FindFirstChild("BodyVelocity")
+        if existing and existing.MaxForce == Vector3.new(100000, 0, 100000) then
+            existing:Destroy()
+        end
+    end
+end)
+antiKnockbackSwitch:Set(true)
+
+-- Lock Position
+MainTab:AddSwitch("Lock Position", function(Value)
+    if Value then
+        local currentPos = player.Character.HumanoidRootPart.CFrame
+        getgenv().posLock = RunService.Heartbeat:Connect(function()
+            if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+                player.Character.HumanoidRootPart.CFrame = currentPos
+            end
+        end)
+    else
+        if getgenv().posLock then
+            getgenv().posLock:Disconnect()
+            getgenv().posLock = nil
+        end
+    end
+end)
+
+MainTab:AddButton("Rejoin", function()
+    TeleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId, player)
+end)
+
+----------------------------------------------------------------
+-- ABA FAST REBIRTH
+----------------------------------------------------------------
+local FastRebTab = window:AddTab("Fast Rebirth")
+
+local isRunning = false
+local startTime = 0
+local totalElapsed = 0
+local initialRebirths = rebirthsStat.Value
+
+local timeLabel = FastRebTab:AddLabel("0d 0h 0m 0s - Inactive")
+timeLabel.TextSize = 17
+timeLabel.TextColor3 = Color3.fromRGB(255, 50, 50)
+
+local paceLabel = FastRebTab:AddLabel("Pace: 0 / Hour | 0 / Day | 0 / Week")
+paceLabel.TextSize = 17
+
+local averagePaceLabel = FastRebTab:AddLabel("Average Pace: 0 / Hour | 0 / Day | 0 / Week")
+averagePaceLabel.TextSize = 17
+
+local rebirthsStatsLabel = FastRebTab:AddLabel("Rebirths: "..formatNumber(rebirthsStat.Value).." | Gained: 0")
+rebirthsStatsLabel.TextSize = 17
+
+local paceHistoryHour, paceHistoryDay, paceHistoryWeek = {}, {}, {}
+local maxHistoryLength = 20
+local rebirthCount = 0
+local lastRebirthTime = tick()
+local lastRebirthValue = rebirthsStat.Value
+
+local function updateRebirthsLabel()
+    local gained = rebirthsStat.Value - initialRebirths
+    rebirthsStatsLabel.Text = string.format("Rebirths: %s | Gained: %s", formatNumber(rebirthsStat.Value), formatNumber(gained))
+end
+
+local function calculatePaceOnRebirth()
+    rebirthCount = rebirthCount + 1
+    if rebirthCount < 2 then
+        lastRebirthTime = tick()
+        lastRebirthValue = rebirthsStat.Value
+        return
+    end
+
+    local now = tick()
+    local gained = rebirthsStat.Value - lastRebirthValue
+    if gained > 0 then
+        local avgTimePerRebirth = (now - lastRebirthTime) / gained
+        local paceHour = 3600 / avgTimePerRebirth
+        local paceDay = 86400 / avgTimePerRebirth
+        local paceWeek = 604800 / avgTimePerRebirth
+
+        paceLabel.Text = string.format("Pace: %s / Hour | %s / Day | %s / Week", formatNumber(paceHour), formatNumber(paceDay), formatNumber(paceWeek))
+
+        table.insert(paceHistoryHour, paceHour)
+        table.insert(paceHistoryDay, paceDay)
+        table.insert(paceHistoryWeek, paceWeek)
+
+        if #paceHistoryHour > maxHistoryLength then
+            table.remove(paceHistoryHour, 1)
+            table.remove(paceHistoryDay, 1)
+            table.remove(paceHistoryWeek, 1)
+        end
+
+        local function average(tbl)
+            local sum = 0
+            for _, v in ipairs(tbl) do sum = sum + v end
+            return #tbl > 0 and (sum / #tbl) or 0
+        end
+
+        averagePaceLabel.Text = string.format("Average Pace: %s / Hour | %s / Day | %s / Week",
+            formatNumber(average(paceHistoryHour)), formatNumber(average(paceHistoryDay)), formatNumber(average(paceHistoryWeek)))
+
+        lastRebirthTime = now
+        lastRebirthValue = rebirthsStat.Value
+    end
+end
+
+rebirthsStat:GetPropertyChangedSignal("Value"):Connect(function()
+    calculatePaceOnRebirth()
+    updateRebirthsLabel()
+end)
+
+local function managePets(petName)
+    unequipPets()
+    task.wait(0.01)
+    equipPetsByName(petName)
+end
+
+local function doRebirth()
+    local rebirths = rebirthsStat.Value
+    local strengthTarget = 5000 + (rebirths * 2550)
+
+    while isRunning and strengthStat.Value < strengthTarget do
+        local reps = player.MembershipType == Enum.MembershipType.Premium and 8 or 14
+        for _ = 1, reps do
+            muscleEvent:FireServer("rep")
+        end
+        task.wait(0.01)
+    end
+
+    if isRunning and strengthStat.Value >= strengthTarget then
+        managePets("Tribal Overlord")
+        task.wait(0.1)
+        local before = rebirthsStat.Value
+        repeat
+            ReplicatedStorage.rEvents.rebirthRemote:InvokeServer("rebirthRequest")
+            task.wait(0.05)
+        until rebirthsStat.Value > before or not isRunning
+    end
+end
+
+local function fastRebirthLoop()
+    while isRunning do
+        managePets("Swift Samurai")
+        doRebirth()
+        task.wait(0.05)
+    end
+end
+
+FastRebTab:AddLabel("Rebirthing:").TextSize = 20
+
+FastRebTab:AddSwitch("Fast Rebirth", function(state)
+    isRunning = state
+    if state then
+        startTime = tick()
+        task.spawn(fastRebirthLoop)
+    else
+        totalElapsed = totalElapsed + (tick() - startTime)
+    end
+end)
+
+task.spawn(function()
+    while true do
+        local elapsed = isRunning and (tick() - startTime + totalElapsed) or totalElapsed
+        local days = math.floor(elapsed / 86400)
+        local hours = math.floor((elapsed % 86400) / 3600)
+        local minutes = math.floor((elapsed % 3600) / 60)
+        local seconds = math.floor(elapsed % 60)
+        timeLabel.Text = string.format("%dd %dh %dm %ds - %s", days, hours, minutes, seconds, isRunning and "Rebirthing" or "Paused")
+        timeLabel.TextColor3 = isRunning and Color3.fromRGB(50, 255, 50) or Color3.fromRGB(255, 50, 50)
+        task.wait(0.1)
+    end
+end)
+
+-- Set Size 1
+local sizeRunning = false
+FastRebTab:AddSwitch("Set Size 1", function(bool)
+    sizeRunning = bool
+    if bool then
+        task.spawn(function()
+            while sizeRunning do
+                ReplicatedStorage.rEvents.changeSpeedSizeRemote:InvokeServer("changeSize", 1)
+                task.wait(0.01)
+            end
+        end)
+    end
+end)
+
+FastRebTab:AddButton("Anti Lag", function()
+    local playerGui = player:WaitForChild("PlayerGui")
+    local lighting = game:GetService("Lighting")
+
+    for _, gui in pairs(playerGui:GetChildren()) do
+        if gui:IsA("ScreenGui") then gui:Destroy() end
+    end
+
+    for _, v in pairs(lighting:GetChildren()) do
+        if v:IsA("Sky") then v:Destroy() end
+    end
+
+    local darkSky = Instance.new("Sky")
+    darkSky.Name = "DarkSky"
+    darkSky.SkyboxBk = "rbxassetid://0"
+    darkSky.SkyboxDn = "rbxassetid://0"
+    darkSky.SkyboxFt = "rbxassetid://0"
+    darkSky.SkyboxLf = "rbxassetid://0"
+    darkSky.SkyboxRt = "rbxassetid://0"
+    darkSky.SkyboxUp = "rbxassetid://0"
+    darkSky.Parent = lighting
+
+    lighting.Brightness = 0
+    lighting.ClockTime = 0
+    lighting.OutdoorAmbient = Color3.new(0, 0, 0)
+    lighting.Ambient = Color3.new(0, 0, 0)
+    lighting.FogColor = Color3.new(0, 0, 0)
+    lighting.FogEnd = 100
+
+    for _, obj in pairs(workspace:GetDescendants()) do
+        if obj:IsA("ParticleEmitter") or obj:IsA("PointLight") or obj:IsA("SpotLight") or obj:IsA("SurfaceLight") then
+            obj:Destroy()
+        end
+    end
+end)
+
+FastRebTab:AddLabel("Misc:").TextSize = 20
+
+-- Lock Position (Fast Rebirth)
+local lockRunning = false
+FastRebTab:AddSwitch("Lock Position", function(state)
+    lockRunning = state
+    if state then
+        local hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+        if hrp then
+            local lockPosition = hrp.Position
+            task.spawn(function()
+                while lockRunning do
+                    if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+                        local root = player.Character.HumanoidRootPart
+                        root.Velocity = Vector3.zero
+                        root.RotVelocity = Vector3.zero
+                        root.CFrame = CFrame.new(lockPosition)
+                    end
+                    task.wait(0.05)
+                end
+            end)
+        end
+    end
+end)
+
+-- Auto Shake
+local autoShake = false
+task.spawn(function()
+    while true do
+        if autoShake then
+            local tool = player.Character and player.Character:FindFirstChild("Tropical Shake") or player.Backpack:FindFirstChild("Tropical Shake")
+            if tool then
+                muscleEvent:FireServer("tropicalShake", tool)
+            end
+            task.wait(450)
+        else
+            task.wait(1)
+        end
+    end
+end)
+
+FastRebTab:AddSwitch("Auto Shake", function(state)
+    autoShake = state
+end):Set(false)
+
+FastRebTab:AddSwitch("Spin Fortune Wheel", function(bool)
+    _G.AutoSpinWheel = bool
+    if bool then
+        task.spawn(function()
+            while _G.AutoSpinWheel do
+                pcall(function()
+                    ReplicatedStorage.rEvents.openFortuneWheelRemote:InvokeServer("openFortuneWheel", ReplicatedStorage.fortuneWheelChances["Fortune Wheel"])
+                end)
+                task.wait(1)
+            end
+        end)
+    end
+end)
+
+FastRebTab:AddButton("Jungle Lift", function()
+    local hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+    if hrp then
+        hrp.CFrame = CFrame.new(-8642.396484375, 6.7980651855, 2086.1030273)
+        task.wait(0.2)
+        VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
+        task.wait(0.05)
+        VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
+    end
+end)
+
+----------------------------------------------------------------
+-- ABA FAST FARM
+----------------------------------------------------------------
+local FarmingTab = window:AddTab("Fast Farm")
+
+local runFastRep = false
+local trackingStarted = false
+local startFarmTime = 0
+local pausedElapsedTime = 0
+local initialStrength = strengthStat.Value
+local initialDurability = durabilityStat.Value
+local strengthHistory, durabilityHistory = {}, {}
+local calculationInterval = 10
+local repsPerTick = 1
+
+local stopwatchLabel = FarmingTab:AddLabel("0d 0h 0m 0s - Fast Rep Inactive")
+stopwatchLabel.TextSize = 17
+stopwatchLabel.TextColor3 = Color3.fromRGB(255, 50, 50)
+
+local projectedStrengthLabel = FarmingTab:AddLabel("Strength Pace: 0 /Hour | 0 /Day | 0 /Week")
+projectedStrengthLabel.TextSize = 17
+
+local projectedDurabilityLabel = FarmingTab:AddLabel("Durability Pace: 0 /Hour | 0 /Day | 0 /Week")
+projectedDurabilityLabel.TextSize = 17
+
+local averageStrengthLabel = FarmingTab:AddLabel("Average Strength Pace: 0 /Hour | 0 /Day | 0 /Week")
+averageStrengthLabel.TextSize = 17
+
+local averageDurabilityLabel = FarmingTab:AddLabel("Average Durability Pace: 0 /Hour | 0 /Day | 0 /Week")
+averageDurabilityLabel.TextSize = 17
+
+local strengthLabel = FarmingTab:AddLabel("Strength: 0 | Gained: 0")
+strengthLabel.TextSize = 17
+
+local durabilityLabel = FarmingTab:AddLabel("Durability: 0 | Gained: 0")
+durabilityLabel.TextSize = 17
+
+task.spawn(function()
+    local lastCalcTime = tick()
+    while true do
+        local currentTime = tick()
+        local currentStrength = strengthStat.Value
+        local currentDurability = durabilityStat.Value
+
+        strengthLabel.Text = "Strength: " .. formatNumber(currentStrength) .. " | Gained: " .. formatNumber(currentStrength - initialStrength)
+        durabilityLabel.Text = "Durability: " .. formatNumber(currentDurability) .. " | Gained: " .. formatNumber(currentDurability - initialDurability)
+
+        if runFastRep then
+            if not trackingStarted then
+                trackingStarted = true
+                startFarmTime = currentTime
+                strengthHistory = {}
+                durabilityHistory = {}
+            end
+
+            local elapsedTime = pausedElapsedTime + (currentTime - startFarmTime)
+            local days = math.floor(elapsedTime / 86400)
+            local hours = math.floor((elapsedTime % 86400) / 3600)
+            local minutes = math.floor((elapsedTime % 3600) / 60)
+            local seconds = math.floor(elapsedTime % 60)
+            stopwatchLabel.Text = string.format("%dd %dh %dm %ds - Fast Rep Running", days, hours, minutes, seconds)
+            stopwatchLabel.TextColor3 = Color3.fromRGB(50, 255, 50)
+
+            table.insert(strengthHistory, {time = currentTime, value = currentStrength})
+            table.insert(durabilityHistory, {time = currentTime, value = currentDurability})
+
+            while #strengthHistory > 0 and currentTime - strengthHistory[1].time > calculationInterval do
+                table.remove(strengthHistory, 1)
+            end
+            while #durabilityHistory > 0 and currentTime - durabilityHistory[1].time > calculationInterval do
+                table.remove(durabilityHistory, 1)
+            end
+
+            if currentTime - lastCalcTime >= calculationInterval then
+                lastCalcTime = currentTime
+                if #strengthHistory >= 2 then
+                    local delta = strengthHistory[#strengthHistory].value - strengthHistory[1].value
+                    local perSec = delta / calculationInterval
+                    projectedStrengthLabel.Text = "Strength Pace: " .. formatNumber(perSec*3600) .. "/Hour | " .. formatNumber(perSec*86400) .. "/Day | " .. formatNumber(perSec*604800) .. "/Week"
+                end
+                if #durabilityHistory >= 2 then
+                    local delta = durabilityHistory[#durabilityHistory].value - durabilityHistory[1].value
+                    local perSec = delta / calculationInterval
+                    projectedDurabilityLabel.Text = "Durability Pace: " .. formatNumber(perSec*3600) .. "/Hour | " .. formatNumber(perSec*86400) .. "/Day | " .. formatNumber(perSec*604800) .. "/Week"
+                end
+
+                local totalElapsed = pausedElapsedTime + (currentTime - startFarmTime)
+                if totalElapsed > 0 then
+                    local avgStr = (currentStrength - initialStrength) / totalElapsed
+                    averageStrengthLabel.Text = "Average Strength Pace: " .. formatNumber(avgStr*3600) .. "/Hour | " .. formatNumber(avgStr*86400) .. "/Day | " .. formatNumber(avgStr*604800) .. "/Week"
+                    local avgDur = (currentDurability - initialDurability) / totalElapsed
+                    averageDurabilityLabel.Text = "Average Durability Pace: " .. formatNumber(avgDur*3600) .. "/Hour | " .. formatNumber(avgDur*86400) .. "/Day | " .. formatNumber(avgDur*604800) .. "/Week"
+                end
+            end
+        else
+            if trackingStarted then
+                trackingStarted = false
+                pausedElapsedTime = pausedElapsedTime + (currentTime - startFarmTime)
+                stopwatchLabel.TextColor3 = Color3.fromRGB(255, 165, 0)
+            end
+        end
+        task.wait(0.05)
+    end
+end)
+
+FarmingTab:AddLabel("Fast Farm (Recommended Speed: 20)").TextSize = 20
+
+FarmingTab:AddTextBox("Rep Speed", function(value)
+    local num = tonumber(value)
+    if num and num > 0 then
+        repsPerTick = math.floor(num)
+    end
+end, {placeholder = "1"})
+
+local function getPing()
+    local stats = game:GetService("Stats")
+    local pingStat = stats:FindFirstChild("PerformanceStats") and stats.PerformanceStats:FindFirstChild("Ping")
+    return pingStat and pingStat:GetValue() or 0
+end
+
+local function fastRepLoop()
+    while runFastRep do
+        if getPing() < 500 then
+            for i = 1, repsPerTick do
+                muscleEvent:FireServer("rep")
+            end
+            task.wait(0.01)
+        else
+            task.wait(0.1)
+        end
+    end
+end
+
+FarmingTab:AddSwitch("Fast Rep", function(state)
+    runFastRep = state
+    if state then
+        task.spawn(fastRepLoop)
+    end
+end)
+
+FarmingTab:AddLabel("Misc:").TextSize = 20
+
+-- Auto Egg
+local autoEgg = false
+task.spawn(function()
+    while true do
+        if autoEgg then
+            local tool = player.Character and player.Character:FindFirstChild("Protein Egg") or player.Backpack:FindFirstChild("Protein Egg")
+            if tool then
+                muscleEvent:FireServer("proteinEgg", tool)
+            end
+            task.wait(1800)
+        else
+            task.wait(1)
+        end
+    end
+end)
+FarmingTab:AddSwitch("Auto Egg", function(state)
+    autoEgg = state
+end):Set(false)
+
+-- Auto Shake
+local autoShake2 = false
+task.spawn(function()
+    while true do
+        if autoShake2 then
+            local tool = player.Character and player.Character:FindFirstChild("Tropical Shake") or player.Backpack:FindFirstChild("Tropical Shake")
+            if tool then
+                muscleEvent:FireServer("tropicalShake", tool)
+            end
+            task.wait(900)
+        else
+            task.wait(1)
+        end
+    end
+end)
+FarmingTab:AddSwitch("Auto Shake", function(state)
+    autoShake2 = state
+end):Set(false)
+
+FarmingTab:AddSwitch("Spin Fortune Wheel", function(bool)
+    _G.AutoSpinWheel = bool
+    if bool then
+        task.spawn(function()
+            while _G.AutoSpinWheel do
+                pcall(function()
+                    ReplicatedStorage.rEvents.openFortuneWheelRemote:InvokeServer("openFortuneWheel", ReplicatedStorage.fortuneWheelChances["Fortune Wheel"])
+                end)
+                task.wait(1)
+            end
+        end)
+    end
+end)
+
+FarmingTab:AddButton("Jungle Squat", function()
+    local hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+    if hrp then
+        hrp.CFrame = CFrame.new(-8371.43359375, 6.79806327, 2858.8852539)
+        task.wait(0.2)
+        VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
+        task.wait(0.05)
+        VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
+    end
+end)
+
+FarmingTab:AddButton("Anti Lag", function()
+    -- mesma função de Anti Lag
+    local playerGui = player:WaitForChild("PlayerGui")
+    local lighting = game:GetService("Lighting")
+    for _, gui in pairs(playerGui:GetChildren()) do
+        if gui:IsA("ScreenGui") then gui:Destroy() end
+    end
+    for _, v in pairs(lighting:GetChildren()) do
+        if v:IsA("Sky") then v:Destroy() end
+    end
+    local darkSky = Instance.new("Sky")
+    darkSky.Name = "DarkSky"
+    darkSky.Parent = lighting
+    lighting.Brightness = 0
+    lighting.ClockTime = 0
+    lighting.OutdoorAmbient = Color3.new(0,0,0)
+    lighting.Ambient = Color3.new(0,0,0)
+    lighting.FogEnd = 100
+end)
+
+FarmingTab:AddButton("Equip Swift Samurai", function()
+    equipPetsByName("Swift Samurai")
+end)
+
+----------------------------------------------------------------
+-- ABA INFO
+----------------------------------------------------------------
+local infoTab = window:AddTab("Info")
+infoTab:AddLabel("TOXIC HUB | Farming").TextSize = 20
+infoTab:AddLabel("Made for Toxic").TextSize = 18
+infoTab:AddButton("Copy Discord", function()
+    if setclipboard then
+        setclipboard("https://discord.gg/8tvVp2Tjft")
+    end
+end)
+
+print("[Toxic Hub] Farming carregado com sucesso!")
